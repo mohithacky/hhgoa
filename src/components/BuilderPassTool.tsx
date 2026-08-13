@@ -11,6 +11,7 @@ import {
   COLORS,
   ROLES,
   CARD,
+  SHARE_CAPTION,
   builderNumberFromName,
   builderClassFromName,
 } from "@/lib/tokens";
@@ -28,6 +29,7 @@ export function BuilderPassTool() {
   const [photo, setPhoto] = useState<HTMLImageElement | null>(null);
   const [name, setName] = useState("");
   const [role, setRole] = useState<string>("Frontend");
+  const [customRole, setCustomRole] = useState("");
   const [offsetX, setOffsetX] = useState(0);
   const [offsetY, setOffsetY] = useState(0);
   const [zoom, setZoom] = useState(1);
@@ -37,6 +39,7 @@ export function BuilderPassTool() {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   // Theme images (HH Goa branding)
   const [logo, setLogo] = useState<HTMLImageElement | null>(null);
@@ -65,6 +68,9 @@ export function BuilderPassTool() {
     [name],
   );
 
+  // Effective role: use custom text if "Other…" is selected, else the preset
+  const effectiveRole = role === "__custom__" ? (customRole.trim() || "Builder") : role;
+
   // ── Canvas rendering ──
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -77,7 +83,7 @@ export function BuilderPassTool() {
       renderCard(ctx, {
         photo,
         name,
-        role,
+        role: effectiveRole,
         builderNumber,
         builderClass,
         offsetX,
@@ -93,7 +99,7 @@ export function BuilderPassTool() {
     } else {
       doRender();
     }
-  }, [photo, name, role, builderNumber, builderClass, offsetX, offsetY, zoom, logo, goaMotif]);
+  }, [photo, name, effectiveRole, builderNumber, builderClass, offsetX, offsetY, zoom, logo, goaMotif]);
 
   useEffect(() => {
     if (phase === "preview" || phase === "issued") {
@@ -191,7 +197,7 @@ export function BuilderPassTool() {
       // Build share URL
       const url = buildShareUrl(window.location.origin, {
         name: name || "Anonymous Builder",
-        role,
+        role: effectiveRole,
         builderNumber,
         builderClass,
       });
@@ -205,57 +211,56 @@ export function BuilderPassTool() {
     setShareUrl(null);
   };
 
+  // ── Render card to a blob (shared by download + share) ──
+  const renderCardToBlob = async (): Promise<Blob | null> => {
+    // Wait for fonts
+    if (document.fonts && document.fonts.ready) {
+      await document.fonts.ready;
+    }
+
+    const exportCanvas = document.createElement("canvas");
+    exportCanvas.width = CARD.width * CARD.exportScale;
+    exportCanvas.height = CARD.height * CARD.exportScale;
+    const ctx = exportCanvas.getContext("2d");
+    if (!ctx) throw new Error("No canvas context");
+
+    renderCard(ctx, {
+      photo,
+      name,
+      role: effectiveRole,
+      builderNumber,
+      builderClass,
+      offsetX,
+      offsetY,
+      zoom,
+      logo,
+      goaMotif,
+    }, CARD.exportScale);
+
+    return new Promise((resolve) => {
+      exportCanvas.toBlob(resolve, "image/png");
+    });
+  };
+
   // ── Download ──
   const handleDownload = async () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
     try {
-      // Render at 2x for high-quality export
-      const exportCanvas = document.createElement("canvas");
-      exportCanvas.width = CARD.width * CARD.exportScale;
-      exportCanvas.height = CARD.height * CARD.exportScale;
-      const ctx = exportCanvas.getContext("2d");
-      if (!ctx) throw new Error("No canvas context");
-
-      // Wait for fonts
-      if (document.fonts && document.fonts.ready) {
-        await document.fonts.ready;
+      const blob = await renderCardToBlob();
+      if (!blob) {
+        setError({
+          msg: "Couldn't export your pass.",
+          guide: "Your photo is still here — try Download again.",
+        });
+        return;
       }
-
-      renderCard(ctx, {
-        photo,
-        name,
-        role,
-        builderNumber,
-        builderClass,
-        offsetX,
-        offsetY,
-        zoom,
-        logo,
-        goaMotif,
-      }, CARD.exportScale);
-
-      exportCanvas.toBlob(
-        (blob) => {
-          if (!blob) {
-            setError({
-              msg: "Couldn't export your pass.",
-              guide: "Your photo is still here — try Download again.",
-            });
-            return;
-          }
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = "hhgoa-2026-builder-pass.png";
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
-        },
-        "image/png",
-      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "hhgoa-2026-builder-pass.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {
       setError({
         msg: "Couldn't export your pass.",
@@ -264,11 +269,47 @@ export function BuilderPassTool() {
     }
   };
 
-  // ── Share on X ──
-  const handleShare = () => {
+  // ── Share on X (with image attached via Web Share API) ──
+  const handleShare = async () => {
     if (!shareUrl) return;
+    setSharing(true);
+
+    const caption = SHARE_CAPTION;
+
+    // Try Web Share API with image file attached (mobile + supported browsers)
+    // This opens the native share sheet, which can share to X with the image.
+    if (navigator.canShare && navigator.share) {
+      try {
+        const blob = await renderCardToBlob();
+        if (blob) {
+          const file = new File([blob], "hhgoa-2026-builder-pass.png", {
+            type: "image/png",
+          });
+          const shareData: ShareData = {
+            text: caption,
+            url: shareUrl,
+          };
+          // Only attach file if the browser supports file sharing
+          if (navigator.canShare({ files: [file] })) {
+            shareData.files = [file];
+          }
+          await navigator.share(shareData);
+          setSharing(false);
+          return; // shared successfully
+        }
+      } catch (e) {
+        // User cancelled or share failed — fall through to intent URL
+        if (e instanceof Error && e.name === "AbortError") {
+          setSharing(false);
+          return;
+        }
+      }
+    }
+
+    // Fallback: X intent URL (text + URL, no image attachment)
     const xUrl = buildXIntentUrl(shareUrl);
     window.open(xUrl, "_blank", "noopener,noreferrer");
+    setSharing(false);
   };
 
   // ── Copy fallback ──
@@ -290,6 +331,7 @@ export function BuilderPassTool() {
     setPhoto(null);
     setName("");
     setRole("Frontend");
+    setCustomRole("");
     setOffsetX(0);
     setOffsetY(0);
     setZoom(1);
@@ -555,9 +597,12 @@ export function BuilderPassTool() {
                   {ROLES.map((r) => (
                     <button
                       key={r}
-                      onClick={() => setRole(r)}
+                      onClick={() => {
+                        setRole(r);
+                        setCustomRole("");
+                      }}
                       className={`tactile-press font-body text-sm px-3 py-2 border-2 border-ink transition-colors ${
-                        role === r
+                        role === r && !customRole
                           ? "bg-palm text-sand"
                           : "bg-transparent text-ink hover:bg-ink/5"
                       }`}
@@ -565,7 +610,33 @@ export function BuilderPassTool() {
                       {r}
                     </button>
                   ))}
+                  {/* Custom role toggle */}
+                  <button
+                    onClick={() => setRole("__custom__")}
+                    className={`tactile-press font-body text-sm px-3 py-2 border-2 border-ink transition-colors ${
+                      role === "__custom__"
+                        ? "bg-palm text-sand"
+                        : "bg-transparent text-ink hover:bg-ink/5"
+                    }`}
+                  >
+                    Other…
+                  </button>
                 </div>
+                {/* Custom role text input */}
+                {role === "__custom__" && (
+                  <input
+                    id="role"
+                    type="text"
+                    value={customRole}
+                    onChange={(e) => setCustomRole(e.target.value)}
+                    placeholder="Type your stack…"
+                    maxLength={24}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="mt-2 w-full bg-transparent border-2 border-ink px-4 py-3 font-body text-base text-ink placeholder:text-ink/30 focus:outline-none focus:border-feni"
+                    autoFocus
+                  />
+                )}
               </div>
 
               {/* Zoom control */}
@@ -613,16 +684,17 @@ export function BuilderPassTool() {
                 </button>
                 <button
                   onClick={handleShare}
-                  className="tactile-press flex-1 bg-palm text-sand font-display font-bold text-lg py-4 px-6 border-2 border-ink hover:bg-palm/90"
+                  disabled={sharing}
+                  className="tactile-press flex-1 bg-palm text-sand font-display font-bold text-lg py-4 px-6 border-2 border-ink hover:bg-palm/90 disabled:opacity-60"
                 >
-                  Share on X
+                  {sharing ? "Preparing…" : "Share on X"}
                 </button>
               </div>
 
               {/* Fallback copy section */}
               <div className="border-2 border-ink/20 p-3 bg-ink/5">
                 <p className="font-mono text-xs text-ink/60 mb-2">
-                  X didn&apos;t open? Copy this instead:
+                  X didn&apos;t open? Download the pass, then copy this caption:
                 </p>
                 <div className="flex gap-2">
                   <button
