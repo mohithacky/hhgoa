@@ -11,7 +11,6 @@ import {
   COLORS,
   ROLES,
   CARD,
-  SHARE_CAPTION,
   builderNumberFromName,
   builderClassFromName,
 } from "@/lib/tokens";
@@ -39,7 +38,6 @@ export function BuilderPassTool() {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const [sharing, setSharing] = useState(false);
 
   // Theme images (HH Goa branding)
   const [logo, setLogo] = useState<HTMLImageElement | null>(null);
@@ -269,47 +267,14 @@ export function BuilderPassTool() {
     }
   };
 
-  // ── Share on X (with image attached via Web Share API) ──
-  const handleShare = async () => {
+  // ── Share on X ──
+  // Opens X directly with the #FrameInGoa caption + share URL.
+  // The image appears in the post as an OG link card: X fetches the /c page,
+  // reads its og:image (the generated card from /api/og), and renders it inline.
+  const handleShare = () => {
     if (!shareUrl) return;
-    setSharing(true);
-
-    const caption = SHARE_CAPTION;
-
-    // Try Web Share API with image file attached (mobile + supported browsers)
-    // This opens the native share sheet, which can share to X with the image.
-    if (navigator.canShare && navigator.share) {
-      try {
-        const blob = await renderCardToBlob();
-        if (blob) {
-          const file = new File([blob], "hhgoa-2026-builder-pass.png", {
-            type: "image/png",
-          });
-          const shareData: ShareData = {
-            text: caption,
-            url: shareUrl,
-          };
-          // Only attach file if the browser supports file sharing
-          if (navigator.canShare({ files: [file] })) {
-            shareData.files = [file];
-          }
-          await navigator.share(shareData);
-          setSharing(false);
-          return; // shared successfully
-        }
-      } catch (e) {
-        // User cancelled or share failed — fall through to intent URL
-        if (e instanceof Error && e.name === "AbortError") {
-          setSharing(false);
-          return;
-        }
-      }
-    }
-
-    // Fallback: X intent URL (text + URL, no image attachment)
     const xUrl = buildXIntentUrl(shareUrl);
     window.open(xUrl, "_blank", "noopener,noreferrer");
-    setSharing(false);
   };
 
   // ── Copy fallback ──
@@ -684,10 +649,9 @@ export function BuilderPassTool() {
                 </button>
                 <button
                   onClick={handleShare}
-                  disabled={sharing}
-                  className="tactile-press flex-1 bg-palm text-sand font-display font-bold text-lg py-4 px-6 border-2 border-ink hover:bg-palm/90 disabled:opacity-60"
+                  className="tactile-press flex-1 bg-palm text-sand font-display font-bold text-lg py-4 px-6 border-2 border-ink hover:bg-palm/90"
                 >
-                  {sharing ? "Preparing…" : "Share on X"}
+                  Share on X
                 </button>
               </div>
 
