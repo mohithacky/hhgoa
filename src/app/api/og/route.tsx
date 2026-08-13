@@ -189,14 +189,14 @@ function CardImage({
         </span>
       </div>
 
-      {/* Photo well with Goan-arch frame */}
+      {/* Photo well — rounded square (matching PFP format) */}
       <div
         style={{
           width: wellW,
           height: wellH,
           backgroundColor: "#0A3326",
           border: `4px solid ${COLORS.kokumYellow}`,
-          borderRadius: `${wellW / 2}px ${wellW / 2}px 0px 0px`,
+          borderRadius: "24px",
           overflow: "hidden",
           display: "flex",
           alignSelf: "center",

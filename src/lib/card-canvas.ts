@@ -84,22 +84,22 @@ export function renderCard(
     topBandY + topBandH / 2,
   );
 
-  // ── 4. Photo well with Goan-arch top frame ──
+  // ── 4. Photo well — rounded square (matching PFP format) ──
   const wellX = 64 * S;
   const wellY = 120 * S;
   const wellW = W - 128 * S;
   const wellH = CARD.photoWellHeight * S;
-  const archRadius = wellW / 2;
+  const cornerR = 24 * S;
 
-  // Arch frame background (slightly lighter green for depth)
+  // Rounded square background (slightly lighter green for depth)
   ctx.fillStyle = "#0A3326";
-  drawArchPath(ctx, wellX, wellY, wellW, wellH, archRadius);
+  drawRoundedRect(ctx, wellX, wellY, wellW, wellH, cornerR);
   ctx.fill();
 
-  // Draw photo inside arch (clipped)
+  // Draw photo inside rounded square (clipped)
   if (opts.photo) {
     ctx.save();
-    drawArchPath(ctx, wellX, wellY, wellW, wellH, archRadius);
+    drawRoundedRect(ctx, wellX, wellY, wellW, wellH, cornerR);
     ctx.clip();
 
     const fit = coverFit(
@@ -133,19 +133,19 @@ export function renderCard(
 
     ctx.restore();
   } else {
-    // Placeholder: dashed kokum-yellow inner frame
+    // Placeholder: darker green fill
     ctx.save();
-    drawArchPath(ctx, wellX, wellY, wellW, wellH, archRadius);
+    drawRoundedRect(ctx, wellX, wellY, wellW, wellH, cornerR);
     ctx.clip();
     ctx.fillStyle = "#0A3326";
     ctx.fillRect(wellX, wellY, wellW, wellH);
     ctx.restore();
   }
 
-  // Goan-arch hairline frame (kokum-yellow)
+  // Rounded square hairline frame (kokum-yellow)
   ctx.strokeStyle = COLORS.kokumYellow;
   ctx.lineWidth = 4 * S;
-  drawArchPath(ctx, wellX, wellY, wellW, wellH, archRadius);
+  drawRoundedRect(ctx, wellX, wellY, wellW, wellH, cornerR);
   ctx.stroke();
 
   // ── 5. Name + role ──
