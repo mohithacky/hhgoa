@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { COLORS, CARD, EVENT_META } from "@/lib/tokens";
+import { COLORS, CARD, PFP, EVENT_META } from "@/lib/tokens";
 
 export const runtime = "nodejs";
 
@@ -52,6 +52,7 @@ export async function GET(request: Request) {
     const builderNumber = searchParams.get("b") || "0001";
     const builderClass = searchParams.get("c") || "SHIP-WEAVER";
     const photoUrl = searchParams.get("p");
+    const format = searchParams.get("f") || "card";
 
     const fonts = await getFonts();
 
@@ -59,18 +60,31 @@ export async function GET(request: Request) {
     const origin = new URL(request.url).origin;
     const logoUrl = `${origin}/hacker-house.png`;
 
+    const isPfp = format === "pfp";
+    const imgWidth = isPfp ? PFP.width : CARD.width;
+    const imgHeight = isPfp ? PFP.height : CARD.height;
+
     return new ImageResponse(
-      <CardImage
-        name={name}
-        role={role}
-        builderNumber={builderNumber}
-        builderClass={builderClass}
-        photoUrl={photoUrl}
-        logoUrl={logoUrl}
-      />,
+      isPfp ? (
+        <PfpImage
+          name={name}
+          builderNumber={builderNumber}
+          photoUrl={photoUrl}
+          logoUrl={logoUrl}
+        />
+      ) : (
+        <CardImage
+          name={name}
+          role={role}
+          builderNumber={builderNumber}
+          builderClass={builderClass}
+          photoUrl={photoUrl}
+          logoUrl={logoUrl}
+        />
+      ),
       {
-        width: CARD.width,
-        height: CARD.height,
+        width: imgWidth,
+        height: imgHeight,
         fonts,
       },
     );
@@ -337,6 +351,148 @@ function CardImage({
             }}
           />
         ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * PFP (Profile Picture) Frame — Format A.
+ * Square 1080×1080. Photo fills center, branded frame wraps it.
+ */
+function PfpImage({
+  name,
+  builderNumber,
+  photoUrl,
+  logoUrl,
+}: {
+  name: string;
+  builderNumber: string;
+  photoUrl: string | null;
+  logoUrl: string;
+}) {
+  const W = PFP.width;
+  const H = PFP.height;
+  const inset = PFP.photoInset;
+  const photoSize = W - inset * 2;
+
+  return (
+    <div
+      style={{
+        width: W,
+        height: H,
+        backgroundColor: COLORS.palmEmerald,
+        display: "flex",
+        flexDirection: "column",
+        position: "relative",
+        fontFamily: "Mukta",
+      }}
+    >
+      {/* Top bar: logo + builder number */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: `36px ${inset}px 0`,
+        }}
+      >
+        <img
+          src={logoUrl}
+          alt="Hacker House"
+          width={180}
+          height={37}
+          style={{ height: 32, width: "auto", objectFit: "contain" }}
+        />
+        <span
+          style={{
+            fontFamily: "Space Mono",
+            fontWeight: 700,
+            fontSize: 16,
+            color: COLORS.kokumYellow,
+          }}
+        >
+          № {builderNumber}
+        </span>
+      </div>
+
+      {/* Photo area — rounded square */}
+      <div
+        style={{
+          width: photoSize,
+          height: photoSize,
+          marginLeft: inset,
+          marginTop: 24,
+          borderRadius: 24,
+          overflow: "hidden",
+          border: `6px solid ${COLORS.kokumYellow}`,
+          backgroundColor: "#0A3326",
+          display: "flex",
+        }}
+      >
+        {photoUrl ? (
+          <img
+            src={photoUrl}
+            alt={name}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontFamily: "Space Mono",
+              fontSize: 20,
+              color: COLORS.sandCream,
+              opacity: 0.4,
+            }}
+          >
+            NO PHOTO
+          </div>
+        )}
+      </div>
+
+      {/* Bottom bar: name + #FrameInGoa chip */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: `0 ${inset}px`,
+          marginTop: "auto",
+          marginBottom: 36,
+        }}
+      >
+        <span
+          style={{
+            fontFamily: "Clash Display",
+            fontWeight: 600,
+            fontSize: 24,
+            color: COLORS.sandCream,
+            textTransform: "uppercase",
+          }}
+        >
+          {(name || "YOUR NAME").toUpperCase()}
+        </span>
+        <span
+          style={{
+            fontFamily: "Space Mono",
+            fontWeight: 700,
+            fontSize: 14,
+            color: COLORS.sandCream,
+            backgroundColor: COLORS.feniPink,
+            padding: "6px 12px",
+          }}
+        >
+          #FrameInGoa
+        </span>
       </div>
     </div>
   );

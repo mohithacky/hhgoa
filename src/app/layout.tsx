@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   description:
     "Upload a photo. Get your Hacker House Goa 2026 builder pass in seconds. Frame yourself in Goa. #FrameInGoa",
   keywords: ["Hacker House Goa", "HH Goa 2026", "Builder Pass", "FrameInGoa"],
+  metadataBase: new URL("https://hhgoa-2026.vercel.app"),
   openGraph: {
     title: "Hacker House Goa 2026 — Builder Pass",
     description:

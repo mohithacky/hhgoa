@@ -29,6 +29,7 @@ export function buildShareUrl(
     builderNumber: string;
     builderClass: string;
     photoUrl?: string;
+    format?: string;
   },
 ): string {
   const query = new URLSearchParams({
@@ -39,6 +40,9 @@ export function buildShareUrl(
   });
   if (params.photoUrl) {
     query.set("p", params.photoUrl);
+  }
+  if (params.format && params.format !== "card") {
+    query.set("f", params.format);
   }
   return `${origin}/c?${query.toString()}`;
 }

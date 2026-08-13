@@ -11,6 +11,8 @@ import {
   COLORS,
   ROLES,
   CARD,
+  PFP,
+  BUILDER_CLASSES,
   builderNumberFromName,
   builderClassFromName,
 } from "@/lib/tokens";
@@ -18,7 +20,7 @@ import {
   processImage,
   ImageProcessingError,
 } from "@/lib/image-utils";
-import { renderCard } from "@/lib/card-canvas";
+import { renderCard, renderPFP, type CardFormat } from "@/lib/card-canvas";
 import { buildXIntentUrl, buildShareUrl, buildFallbackShareText } from "@/lib/share";
 
 type Phase = "upload" | "preview" | "issued";
@@ -29,6 +31,8 @@ export function BuilderPassTool() {
   const [name, setName] = useState("");
   const [role, setRole] = useState<string>("Frontend");
   const [customRole, setCustomRole] = useState("");
+  const [format, setFormat] = useState<CardFormat>("card");
+  const [builderClassOverride, setBuilderClassOverride] = useState<string | null>(null);
   const [offsetX, setOffsetX] = useState(0);
   const [offsetY, setOffsetY] = useState(0);
   const [zoom, setZoom] = useState(1);
@@ -61,10 +65,12 @@ export function BuilderPassTool() {
     () => builderNumberFromName(name || "builder"),
     [name],
   );
-  const builderClass = useMemo(
+  const computedBuilderClass = useMemo(
     () => builderClassFromName(name || "builder"),
     [name],
   );
+  // Effective builder class: override (from shuffle) takes priority, else computed from name
+  const builderClass = builderClassOverride ?? computedBuilderClass;
 
   // Effective role: use custom text if "Other…" is selected, else the preset
   const effectiveRole = role === "__custom__" ? (customRole.trim() || "Builder") : role;
@@ -76,20 +82,31 @@ export function BuilderPassTool() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // Set canvas dimensions based on format
+    const isPfp = format === "pfp";
+    canvas.width = isPfp ? PFP.width : CARD.width;
+    canvas.height = isPfp ? PFP.height : CARD.height;
+
+    const renderOpts = {
+      photo,
+      name,
+      role: effectiveRole,
+      builderNumber,
+      builderClass,
+      offsetX,
+      offsetY,
+      zoom,
+      logo,
+      goaMotif,
+    };
+
     // Ensure fonts are loaded before rendering
     const doRender = () => {
-      renderCard(ctx, {
-        photo,
-        name,
-        role: effectiveRole,
-        builderNumber,
-        builderClass,
-        offsetX,
-        offsetY,
-        zoom,
-        logo,
-        goaMotif,
-      });
+      if (isPfp) {
+        renderPFP(ctx, renderOpts);
+      } else {
+        renderCard(ctx, renderOpts);
+      }
     };
 
     if (document.fonts && document.fonts.ready) {
@@ -97,7 +114,7 @@ export function BuilderPassTool() {
     } else {
       doRender();
     }
-  }, [photo, name, effectiveRole, builderNumber, builderClass, offsetX, offsetY, zoom, logo, goaMotif]);
+  }, [photo, name, effectiveRole, builderNumber, builderClass, offsetX, offsetY, zoom, logo, goaMotif, format]);
 
   useEffect(() => {
     if (phase === "preview" || phase === "issued") {
@@ -198,6 +215,7 @@ export function BuilderPassTool() {
         role: effectiveRole,
         builderNumber,
         builderClass,
+        format,
       });
       setShareUrl(url);
     }, 400);
@@ -216,13 +234,15 @@ export function BuilderPassTool() {
       await document.fonts.ready;
     }
 
+    const isPfp = format === "pfp";
     const exportCanvas = document.createElement("canvas");
-    exportCanvas.width = CARD.width * CARD.exportScale;
-    exportCanvas.height = CARD.height * CARD.exportScale;
+    const exportScale = isPfp ? PFP.exportScale : CARD.exportScale;
+    exportCanvas.width = (isPfp ? PFP.width : CARD.width) * exportScale;
+    exportCanvas.height = (isPfp ? PFP.height : CARD.height) * exportScale;
     const ctx = exportCanvas.getContext("2d");
     if (!ctx) throw new Error("No canvas context");
 
-    renderCard(ctx, {
+    const renderOpts = {
       photo,
       name,
       role: effectiveRole,
@@ -233,7 +253,13 @@ export function BuilderPassTool() {
       zoom,
       logo,
       goaMotif,
-    }, CARD.exportScale);
+    };
+
+    if (isPfp) {
+      renderPFP(ctx, renderOpts, exportScale);
+    } else {
+      renderCard(ctx, renderOpts, exportScale);
+    }
 
     return new Promise((resolve) => {
       exportCanvas.toBlob(resolve, "image/png");
@@ -254,7 +280,7 @@ export function BuilderPassTool() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "hhgoa-2026-builder-pass.png";
+      a.download = format === "pfp" ? "hhgoa-2026-pfp.png" : "hhgoa-2026-builder-pass.png";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -290,6 +316,13 @@ export function BuilderPassTool() {
     }
   };
 
+  // ── Shuffle builder class ──
+  const handleShuffleClass = () => {
+    const others = BUILDER_CLASSES.filter((c) => c !== builderClass);
+    const random = others[Math.floor(Math.random() * others.length)];
+    setBuilderClassOverride(random);
+  };
+
   // ── Reset ──
   const handleReset = () => {
     setPhase("upload");
@@ -297,6 +330,8 @@ export function BuilderPassTool() {
     setName("");
     setRole("Frontend");
     setCustomRole("");
+    setFormat("card");
+    setBuilderClassOverride(null);
     setOffsetX(0);
     setOffsetY(0);
     setZoom(1);
@@ -480,9 +515,10 @@ export function BuilderPassTool() {
             </button>
           ) : (
             <div
-              className={`relative w-full aspect-[4/5] bg-palm ${
+              className={`relative w-full bg-palm ${
                 stamping ? "flash-animate" : ""
               }`}
+              style={{ aspectRatio: format === "pfp" ? "1 / 1" : "4 / 5" }}
             >
               <canvas
                 ref={canvasRef}
@@ -528,6 +564,35 @@ export function BuilderPassTool() {
 
           {phase === "preview" && (
             <div className="space-y-4">
+              {/* Format toggle: Builder Card (default) vs PFP Frame */}
+              <div>
+                <label className="block font-mono text-xs text-ink/60 uppercase tracking-wider mb-1">
+                  Format
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setFormat("card")}
+                    className={`tactile-press font-body text-sm px-3 py-2 border-2 border-ink transition-colors flex-1 ${
+                      format === "card"
+                        ? "bg-palm text-sand"
+                        : "bg-transparent text-ink hover:bg-ink/5"
+                    }`}
+                  >
+                    Builder Card
+                  </button>
+                  <button
+                    onClick={() => setFormat("pfp")}
+                    className={`tactile-press font-body text-sm px-3 py-2 border-2 border-ink transition-colors flex-1 ${
+                      format === "pfp"
+                        ? "bg-palm text-sand"
+                        : "bg-transparent text-ink hover:bg-ink/5"
+                    }`}
+                  >
+                    PFP Frame
+                  </button>
+                </div>
+              </div>
+
               {/* Name input */}
               <div>
                 <label
@@ -624,6 +689,25 @@ export function BuilderPassTool() {
                 />
               </div>
 
+              {/* Builder class + shuffle */}
+              <div>
+                <label className="block font-mono text-xs text-ink/60 uppercase tracking-wider mb-1">
+                  Builder class
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="flex-1 font-display font-semibold text-base text-palm bg-palm/5 border-2 border-ink/30 px-3 py-2">
+                    {builderClass}
+                  </span>
+                  <button
+                    onClick={handleShuffleClass}
+                    className="tactile-press font-mono text-xs text-ink border-2 border-ink px-3 py-2 hover:bg-ink/5 whitespace-nowrap"
+                    aria-label="Shuffle builder class"
+                  >
+                    SHUFFLE
+                  </button>
+                </div>
+              </div>
+
               {/* Issue button */}
               <button
                 onClick={handleIssue}
@@ -637,7 +721,7 @@ export function BuilderPassTool() {
           {phase === "issued" && (
             <div className="space-y-4">
               <p className="font-display font-semibold text-lg text-palm text-center">
-                Your pass is ready.
+                {format === "pfp" ? "Your PFP frame is ready." : "Your pass is ready."}
               </p>
 
               <div className="flex flex-col sm:flex-row gap-3">
@@ -645,7 +729,7 @@ export function BuilderPassTool() {
                   onClick={handleDownload}
                   className="tactile-press flex-1 bg-kokum text-palm font-display font-bold text-lg py-4 px-6 border-2 border-ink hover:bg-kokum/90"
                 >
-                  Download pass
+                  {format === "pfp" ? "Download PFP" : "Download pass"}
                 </button>
                 <button
                   onClick={handleShare}

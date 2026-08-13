@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { SHARE_CAPTION } from "@/lib/tokens";
 
 interface SharePageProps {
@@ -9,6 +10,7 @@ interface SharePageProps {
     b?: string;
     c?: string;
     p?: string;
+    f?: string;
   }>;
 }
 
@@ -21,39 +23,50 @@ export async function generateMetadata({
   const builderNumber = params.b || "0001";
   const builderClass = params.c || "SHIP-WEAVER";
   const photoUrl = params.p;
+  const format = params.f || "card";
 
-  // Build OG image URL — includes all params so the OG card matches the user's pass
+  // Build absolute OG image URL — X's crawler requires absolute HTTPS URLs
+  const hdrs = await headers();
+  const host = hdrs.get("x-forwarded-host") || hdrs.get("host") || "localhost:3000";
+  const protocol = hdrs.get("x-forwarded-proto") || "http";
+  const origin = `${protocol}://${host}`;
+
   const ogParams = new URLSearchParams({
     n: name,
     r: role,
     b: builderNumber,
     c: builderClass,
+    f: format,
   });
   if (photoUrl) ogParams.set("p", photoUrl);
 
-  const ogImageUrl = `/api/og?${ogParams.toString()}`;
-  const title = `${name} — Hacker House Goa 2026 Builder Pass`;
+  const ogImageUrl = `${origin}/api/og?${ogParams.toString()}`;
+  const isPfp = format === "pfp";
+  const title = isPfp
+    ? `${name} — Hacker House Goa 2026 PFP Frame`
+    : `${name} — Hacker House Goa 2026 Builder Pass`;
 
   return {
     title,
-    description: `${name} stamped their builder pass for Hacker House Goa 2026. ${SHARE_CAPTION}`,
+    description: `${name} stamped their ${isPfp ? "PFP frame" : "builder pass"} for Hacker House Goa 2026. ${SHARE_CAPTION}`,
+    metadataBase: new URL(origin),
     openGraph: {
       title,
-      description: `${name} stamped their builder pass for Hacker House Goa 2026. #FrameInGoa`,
+      description: `${name} stamped their ${isPfp ? "PFP frame" : "builder pass"} for Hacker House Goa 2026. #FrameInGoa`,
       type: "website",
       images: [
         {
           url: ogImageUrl,
-          width: 1080,
-          height: 1350,
-          alt: `${name}'s Hacker House Goa 2026 Builder Pass`,
+          width: isPfp ? 1080 : 1080,
+          height: isPfp ? 1080 : 1350,
+          alt: `${name}'s Hacker House Goa 2026 ${isPfp ? "PFP Frame" : "Builder Pass"}`,
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
       title,
-      description: `${name} stamped their builder pass for Hacker House Goa 2026. #FrameInGoa`,
+      description: `${name} stamped their ${isPfp ? "PFP frame" : "builder pass"} for Hacker House Goa 2026. #FrameInGoa`,
       images: [ogImageUrl],
     },
   };
@@ -66,12 +79,14 @@ export default async function SharePage({ searchParams }: SharePageProps) {
   const builderNumber = params.b || "0001";
   const builderClass = params.c || "SHIP-WEAVER";
   const photoUrl = params.p;
+  const format = params.f || "card";
 
   const ogParams = new URLSearchParams({
     n: name,
     r: role,
     b: builderNumber,
     c: builderClass,
+    f: format,
   });
   if (photoUrl) ogParams.set("p", photoUrl);
   const ogImageUrl = `/api/og?${ogParams.toString()}`;

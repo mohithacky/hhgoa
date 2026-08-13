@@ -33,6 +33,18 @@ export const CARD = {
 } as const;
 
 /**
+ * PFP (Profile Picture) dimensions.
+ * Square 1080x1080, exported at 2x for crisp downloads.
+ */
+export const PFP = {
+  width: 1080,
+  height: 1080,
+  exportScale: 2,
+  frameWidth: 80, // branded border thickness
+  photoInset: 120, // distance from edge to photo area
+} as const;
+
+/**
  * Builder classes — generated from the user's name hash.
  * Each evokes a builder archetype tied to the HH Goa ethos.
  */

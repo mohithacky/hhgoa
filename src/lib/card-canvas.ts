@@ -13,8 +13,10 @@
  *   - #FrameInGoa pink chip + metadata (Space Mono)
  */
 
-import { COLORS, CARD, EVENT_META } from "./tokens";
+import { COLORS, CARD, PFP, EVENT_META } from "./tokens";
 import { coverFit } from "./image-utils";
+
+export type CardFormat = "card" | "pfp";
 
 export interface CardRenderOptions {
   photo: HTMLImageElement | null;
@@ -219,6 +221,169 @@ export function renderCard(
 
   // ── 7. Bottom block-print border echo ──
   drawBlockBorderBottom(ctx, W, H, S);
+}
+
+/**
+ * Render the PFP (Profile Picture) Frame — Format A.
+ * Square 1080×1080. The photo fills the center; a branded HH Goa frame wraps it.
+ *
+ * Layout:
+ *   - Palm-emerald background with block-print border
+ *   - Top bar: HH logo + builder number
+ *   - Center: photo in a rounded square with kokum-yellow frame
+ *   - Bottom bar: name + #FrameInGoa chip
+ */
+export function renderPFP(
+  ctx: CanvasRenderingContext2D,
+  opts: CardRenderOptions,
+  scale = 1,
+): void {
+  const W = PFP.width * scale;
+  const H = PFP.height * scale;
+  const S = scale;
+
+  // ── 1. Background ──
+  ctx.fillStyle = COLORS.palmEmerald;
+  ctx.fillRect(0, 0, W, H);
+
+  // ── 2. Block-print border (all four sides) ──
+  drawBlockBorder(ctx, W, H, S);
+  drawBlockBorderBottom(ctx, W, H, S);
+
+  // ── 3. Top bar: HH logo + builder number ──
+  const topY = 36 * S;
+  if (opts.logo) {
+    const logoH = 32 * S;
+    const logoW = (opts.logo.naturalWidth / opts.logo.naturalHeight) * logoH;
+    ctx.drawImage(opts.logo, PFP.photoInset * S, topY, logoW, logoH);
+  } else {
+    ctx.fillStyle = COLORS.sandCream;
+    ctx.font = `700 ${20 * S}px "Clash Display", "Arial Narrow", sans-serif`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText("HACKER HOUSE GOA", PFP.photoInset * S, topY + 16 * S);
+  }
+
+  ctx.fillStyle = COLORS.kokumYellow;
+  ctx.font = `700 ${16 * S}px "Space Mono", "Courier New", monospace`;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  ctx.fillText(`№ ${opts.builderNumber}`, W - PFP.photoInset * S, topY + 16 * S);
+
+  // ── 4. Photo area — rounded square, centered ──
+  const photoSize = W - PFP.photoInset * 2 * S;
+  const photoX = PFP.photoInset * S;
+  const photoY = (H - photoSize) / 2;
+  const cornerR = 24 * S;
+
+  // Photo background
+  ctx.fillStyle = "#0A3326";
+  drawRoundedRect(ctx, photoX, photoY, photoSize, photoSize, cornerR);
+  ctx.fill();
+
+  // Draw photo (clipped to rounded square)
+  if (opts.photo) {
+    ctx.save();
+    drawRoundedRect(ctx, photoX, photoY, photoSize, photoSize, cornerR);
+    ctx.clip();
+
+    const fit = coverFit(
+      opts.photo.naturalWidth,
+      opts.photo.naturalHeight,
+      photoSize,
+      photoSize,
+      opts.offsetX,
+      opts.offsetY,
+      opts.zoom,
+    );
+
+    ctx.drawImage(
+      opts.photo,
+      fit.sx,
+      fit.sy,
+      fit.sw,
+      fit.sh,
+      photoX,
+      photoY,
+      photoSize,
+      photoSize,
+    );
+    ctx.restore();
+  }
+
+  // Kokum-yellow frame around photo
+  ctx.strokeStyle = COLORS.kokumYellow;
+  ctx.lineWidth = 6 * S;
+  drawRoundedRect(ctx, photoX, photoY, photoSize, photoSize, cornerR);
+  ctx.stroke();
+
+  // ── 5. Bottom bar: name + #FrameInGoa ──
+  const bottomY = H - 80 * S;
+  const displayName = opts.name.trim() || "YOUR NAME";
+
+  // Name (left)
+  ctx.fillStyle = COLORS.sandCream;
+  ctx.font = `600 ${24 * S}px "Clash Display", "Arial Narrow", sans-serif`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  // Truncate if too long
+  const maxNameW = W - PFP.photoInset * 2 * S - 200 * S;
+  let nameText = displayName.toUpperCase();
+  while (ctx.measureText(nameText).width > maxNameW && nameText.length > 3) {
+    nameText = nameText.slice(0, -1);
+  }
+  if (nameText !== displayName.toUpperCase()) nameText += "…";
+  ctx.fillText(nameText, PFP.photoInset * S, bottomY);
+
+  // #FrameInGoa chip (right)
+  ctx.font = `700 ${14 * S}px "Space Mono", "Courier New", monospace`;
+  const chipText = EVENT_META.hashtag;
+  const chipTextW = ctx.measureText(chipText).width;
+  const chipPad = 12 * S;
+  const chipW = chipTextW + chipPad * 2;
+  const chipH = 28 * S;
+  const chipX = W - PFP.photoInset * S - chipW;
+  const chipY = bottomY - chipH / 2;
+
+  ctx.fillStyle = COLORS.feniPink;
+  ctx.fillRect(chipX, chipY, chipW, chipH);
+  ctx.fillStyle = COLORS.sandCream;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(chipText, chipX + chipPad, bottomY);
+
+  // ── 6. Goan Hindi motif — subtle watermark in corner ──
+  if (opts.goaMotif) {
+    const motifSize = 60 * S;
+    ctx.save();
+    ctx.globalAlpha = 0.10;
+    ctx.drawImage(opts.goaMotif, W - motifSize - 40 * S, topY - 10 * S, motifSize, motifSize);
+    ctx.restore();
+  }
+}
+
+/**
+ * Draw a rounded rectangle path.
+ */
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
 }
 
 /**
